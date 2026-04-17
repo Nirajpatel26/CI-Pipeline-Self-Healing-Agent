@@ -1,0 +1,42 @@
+[
+  {
+    "condition": "baseline",
+    "recovery_rate_pct": 100.0,
+    "mean_attempts": 2.775,
+    "escalation_rate_pct": 45.5,
+    "mean_episode_reward": -1.894,
+    "std_episode_reward": 10.3893,
+    "convergence_episode": 0,
+    "n_episodes": 200
+  },
+  {
+    "condition": "rule_based",
+    "recovery_rate_pct": 100.0,
+    "mean_attempts": 1.33,
+    "escalation_rate_pct": 10.0,
+    "mean_episode_reward": 7.322,
+    "std_episode_reward": 4.5292,
+    "convergence_episode": 0,
+    "n_episodes": 200
+  },
+  {
+    "condition": "q_learning",
+    "recovery_rate_pct": 100.0,
+    "mean_attempts": 1.48,
+    "escalation_rate_pct": 4.5,
+    "mean_episode_reward": 7.394,
+    "std_episode_reward": 4.6226,
+    "convergence_episode": 0,
+    "n_episodes": 200
+  },
+  {
+    "condition": "ucb",
+    "recovery_rate_pct": 100.0,
+    "mean_attempts": 1.585,
+    "escalation_rate_pct": 1.0,
+    "mean_episode_reward": 7.353,
+    "std_episode_reward": 4.2923,
+    "convergence_episode": 0,
+    "n_episodes": 200
+  }
+]
