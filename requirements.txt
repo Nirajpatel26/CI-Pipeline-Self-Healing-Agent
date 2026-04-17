@@ -1,0 +1,7 @@
+pyautogen==0.2.35
+numpy
+pandas
+matplotlib
+seaborn
+pytest
+requests
