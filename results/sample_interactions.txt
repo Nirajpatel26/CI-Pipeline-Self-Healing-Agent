@@ -1,0 +1,86 @@
+=================================================================
+  CI Pipeline Self-Healing Agent — Sample Interactions
+  INFO 7375 | Niraj Patel
+=================================================================
+
+
+█████████████████████████████████████████████████████████████████
+  SECTION A  Learning Progress — Q-Learning Agent
+  Compare how the agent behaves at episode ~10 vs episode ~1990
+█████████████████████████████████████████████████████████████████
+
+  ── EARLY TRAINING (episodes 5, 8, 10) — agent is still exploring ──
+  At this stage ε ≈ 0.97, so most actions are random.
+
+
+────────────────────────────────────────────────────────────
+  Episode 6  [EARLY]
+  Failure: lint / syntax_error
+────────────────────────────────────────────────────────────
+  Step 1: 🚨 escalate          reward=  +6.0   ✅ FIXED
+────────────────────────────────────────────────────────────
+  Total reward: +6.00   Steps: 1   Escalated: YES
+
+────────────────────────────────────────────────────────────
+  Episode 9  [EARLY]
+  Failure: security_scan / vuln_detected
+────────────────────────────────────────────────────────────
+  Step 1: 🔁 retry             reward=  -3.0   ❌ failed
+  Step 2: 🔧 auto_fix          reward=  -3.0   ❌ failed
+  Step 3: ⏭️  skip_stage        reward=  +0.0   ✅ FIXED
+────────────────────────────────────────────────────────────
+  Total reward: -6.00   Steps: 3   Escalated: no
+
+────────────────────────────────────────────────────────────
+  Episode 11  [EARLY]
+  Failure: deploy / rollback_needed
+────────────────────────────────────────────────────────────
+  Step 1: 🚨 escalate          reward=  -0.4   ✅ FIXED
+────────────────────────────────────────────────────────────
+  Total reward: -0.40   Steps: 1   Escalated: YES
+
+
+  ── LATE TRAINING (episodes 1988, 1994, 1999) — agent has converged ──
+  At this stage ε ≈ 0.05, agent acts on learned Q-values.
+
+
+────────────────────────────────────────────────────────────
+  Episode 1989  [LATE]
+  Failure: lint / syntax_error
+────────────────────────────────────────────────────────────
+  Step 1: ⏭️  skip_stage        reward= +10.0   ✅ FIXED
+────────────────────────────────────────────────────────────
+  Total reward: +10.00   Steps: 1   Escalated: no
+
+────────────────────────────────────────────────────────────
+  Episode 1995  [LATE]
+  Failure: security_scan / vuln_detected
+────────────────────────────────────────────────────────────
+  Step 1: 🔧 auto_fix          reward= +10.0   ✅ FIXED
+────────────────────────────────────────────────────────────
+  Total reward: +10.00   Steps: 1   Escalated: no
+
+────────────────────────────────────────────────────────────
+  Episode 2000  [LATE]
+  Failure: deploy / rollback_needed
+────────────────────────────────────────────────────────────
+  Step 1: ↩️  revert            reward= +10.0   ✅ FIXED
+────────────────────────────────────────────────────────────
+  Total reward: +10.00   Steps: 1   Escalated: no
+
+
+█████████████████████████████████████████████████████████████████
+  SECTION B  Before / After — Same Failures, 4 Policies
+  Each row is the SAME failure; columns are the 4 policies.
+█████████████████████████████████████████████████████████████████
+
+  Failure                             Baseline      Rule-Based     Q-Learning        UCB      
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  lint/syntax_error                ✅ retry      r=+10  ✅ auto_fix   r=+10  ✅ skip_stage r=+10  ✅ auto_fix   r=+10
+  build/version_conflict           ✅ retry→retr r=+6  ✅ switch_ver r=+10  ✅ revert→swi r=+6  ✅ switch_ver r=+10
+  test/flaky_test                  ✅ retry      r=+10  ✅ retry      r=+10  ✅ skip_stage r=+10  ✅ skip_stage r=+10
+  security_scan/vuln_detected      🚨 retry→retr r=-18  ✅ revert     r=+10  ✅ auto_fix   r=+10  ✅ revert→rev r=+4
+  deploy/rollback_needed           🚨 retry→retr r=-15  ✅ revert     r=+10  ✅ revert     r=+10  ✅ revert     r=+10
+
+  Legend: 🚨 = escalated to human   ✅ = auto-resolved
+  r = total episode reward
