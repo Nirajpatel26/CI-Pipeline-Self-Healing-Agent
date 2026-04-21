@@ -27,16 +27,20 @@
 
 The **CI Pipeline Self-Healing Agent** is a multi-agent reinforcement learning system that autonomously detects and recovers from failures in a simulated CI/CD pipeline. It combines tabular Q-Learning (with two exploration strategies—epsilon-greedy and UCB1) with a four-agent AutoGen GroupChat framework and an optional Llama 3.1 8B LLM integration.
 
-**Key results across 200 evaluation episodes each:**
+**Key results across 200 evaluation episodes each (single seed, synthetic simulator):**
 
-| Condition   | Recovery Rate | Mean Attempts | Escalation Rate | Mean Reward |
-|-------------|:------------:|:-------------:|:---------------:|:-----------:|
-| Baseline    | 100%         | 2.775         | 45.5%           | −1.894      |
-| Rule-Based  | 100%         | 1.33          | 10.0%           | +7.322      |
-| Q-Learning  | 100%         | 1.48          | **4.5%**        | +7.394      |
-| **UCB**     | 100%         | 1.585         | **1.0%**        | +7.353      |
+| Condition   | Recovery Rate* | Mean Attempts | Escalation Rate [95% CI]† | Mean Reward | Reward Std |
+|-------------|:-------------:|:-------------:|:-------------------------:|:-----------:|:----------:|
+| Baseline    | 100%          | 2.775         | 45.5% [38.8, 52.4]        | −1.894      | 10.389     |
+| Rule-Based  | 100%          | 1.330         | 10.0% [6.6, 14.9]         | +7.322      | 4.529      |
+| Q-Learning  | 100%          | 1.480         | **4.5%** [2.4, 8.3]       | **+7.394**  | 4.623      |
+| **UCB**     | 100%          | 1.585         | **1.0%** [0.3, 3.6]       | +7.353      | **4.292**  |
 
-UCB achieves the lowest escalation rate (1.0%) while maintaining 100% pipeline recovery and near-optimal mean reward, demonstrating that principled optimism-based exploration outperforms both ε-greedy and static rule sets for CI healing tasks.
+&#42; *Recovery Rate* is a **ceilinged metric** in this simulator: the `escalate` action is assigned a 0.99 success probability, so human escalation almost always resolves the failure. All conditions reach 100%, making recovery rate uninformative for comparing policies. Use escalation rate, mean reward, and mean attempts for differentiation.
+
+† Escalation-rate 95% confidence intervals are computed via the Wilson score interval on n = 200 evaluation episodes per condition. UCB's CI (0.3–3.6%) does not overlap Q-Learning's (2.4–8.3%), supporting the claim that UCB reduces escalations more than Q-Learning under this seed.
+
+UCB achieves the lowest escalation rate (1.0%) and the most stable rewards (std 4.292), suggesting it finds effective recovery actions more reliably than ε-greedy on this simulator. Results are from a single random seed (42) on a synthetic stochastic environment and should be validated with multi-seed runs and real pipeline data before any production claim.
 
 ---
 
@@ -301,37 +305,63 @@ All conditions share:
 | Std Episode Reward | Reward standard deviation (policy stability) |
 | Convergence Episode | First 100-episode window achieving ≥ 85% recovery rate |
 
+> **Note:** Convergence Episode returned **N/A** in all runs because the recovery rate metric is saturated at 100% for every condition from episode 0 — the simulator's 0.99 escalation-success probability means the 85% threshold is trivially satisfied. A more informative convergence proxy for future runs would be the first window where escalation rate drops below 5%.
+
 ---
 
 ## 8. Results & Analysis
 
 ### 8.1 Summary Table
 
-| Condition  | Recovery | Mean Attempts | Escalation | Mean Reward | Std Reward |
-|------------|:--------:|:-------------:|:----------:|:-----------:|:----------:|
-| Baseline   | 100%     | 2.775         | 45.5%      | −1.894      | 10.389     |
-| Rule-Based | 100%     | 1.330         | 10.0%      | +7.322      | 4.529      |
-| Q-Learning | 100%     | 1.480         | 4.5%       | **+7.394**  | 4.623      |
-| UCB        | 100%     | 1.585         | **1.0%**   | +7.353      | **4.292**  |
+| Condition  | Recovery* | Mean Attempts | Escalation [95% CI]†    | Mean Reward | Reward Std |
+|------------|:---------:|:-------------:|:-----------------------:|:-----------:|:----------:|
+| Baseline   | 100%      | 2.775         | 45.5% [38.8, 52.4]      | −1.894      | 10.389     |
+| Rule-Based | 100%      | 1.330         | 10.0% [6.6, 14.9]       | +7.322      | 4.529      |
+| Q-Learning | 100%      | 1.480         | 4.5%  [2.4, 8.3]        | **+7.394**  | 4.623      |
+| UCB        | 100%      | 1.585         | **1.0%** [0.3, 3.6]     | +7.353      | **4.292**  |
 
-### 8.2 Learning Dynamics
+&#42; Ceilinged metric — see Section 7.2 note.
+† 95% confidence intervals on escalation rate computed with the Wilson score interval (n = 200 evaluation episodes per condition). The Wilson interval is preferred over the normal-approximation interval at small counts and near the 0/1 boundaries. The non-overlapping CIs between UCB (0.3–3.6%) and Q-Learning (2.4–8.3%) support the claim that UCB reduces escalations more than Q-Learning on this seed.
 
-**Figure 1 — Epsilon Decay:**  
-ε begins at 1.0 and decays multiplicatively (rate = 0.995) to the floor of 0.05, reached at approximately episode 600. Episodes 600–2000 are predominantly exploitation with residual exploration.
+Recovery rate is 100% for all conditions because the simulator assigns `escalate` a 0.99 success probability — escalation always resolves the failure. The true policy differentiators are escalation rate, mean attempts, mean reward, and reward stability (std).
 
-**Figure 2 — Escalation Rate During Training (rolling 100-episode window):**  
-- Both agents start near 0% escalation (first few episodes are random; most random actions happen to resolve without escalating)
-- UCB peaks at ~36% escalation around episode 15, then declines monotonically to ~0% by episode 500
-- Q-Learning peaks later (~27% near episode 170), then slowly descends to ~9% by episode 500
-- UCB learns the "don't escalate" policy roughly twice as fast as Q-Learning
+### 8.2 Chart Interpretations
 
-**Figure 3 — Learning Curve (mean reward, rolling 50):**  
-- Both agents achieve mean reward > 7.0 by episode 400
-- UCB consistently outperforms Q-Learning in the 150–350 episode range, reflecting faster Q-value convergence through uncertainty-guided exploration
-- Q-Learning shows higher variance throughout training (std 4.623 vs UCB 4.292)
+#### Figure 1 — Epsilon Decay Curve
 
-**Figures 4 & 5 — Q-Table Heatmaps:**  
-The heatmaps aggregate learned Q-values by pipeline stage × action (mean over all error/attempt states):
+![Epsilon decay curve](results/epsilon_decay.png)
+
+*Figure 1. Epsilon decay schedule (ε: 1.0 → 0.05 by ~episode 600).*
+
+ε begins at 1.0 and decays multiplicatively (rate = 0.995) to the floor of 0.05, reached at approximately episode 600. Episodes 600–2000 are predominantly exploitation with 5% residual exploration. Only relevant to the Q-Learning condition; UCB uses visit-count-based exploration.
+
+#### Figure 2 — Escalation Rate During Training
+
+![Escalation rate during training](results/escalation_rate.png)
+
+*Figure 2. Rolling escalation rate across training — UCB converges to ~0%.*
+
+Both agents start near 0% escalation (early random actions happen to resolve without escalating). UCB peaks at ~36% escalation around episode 15, then declines monotonically to ~0% by episode 500. Q-Learning peaks later (~27% near episode 170), then slowly descends to ~9% by episode 500. UCB learns the "don't escalate" policy roughly twice as fast as Q-Learning.
+
+#### Figure 3 — Learning Curve (Mean Reward, Rolling 50)
+
+![Learning curve](results/learning_curve.png)
+
+*Figure 3. Mean episode reward (rolling window = 50). Both RL agents plateau above +7.*
+
+Both agents achieve mean reward > 7.0 by episode 400. UCB consistently outperforms Q-Learning in the 150–350 episode range, reflecting faster Q-value convergence through uncertainty-guided exploration. Q-Learning shows higher variance throughout training (std 4.623 vs UCB 4.292).
+
+#### Figures 4 & 5 — Q-Table Heatmaps
+
+![Q-Learning Q-table heatmap](results/q_table_heatmap.png)
+
+*Figure 4. Q-Learning agent Q-table heatmap — mean Q(s,a) by stage × action.*
+
+![UCB Q-table heatmap](results/q_table_heatmap_ucb.png)
+
+*Figure 5. UCB agent Q-table heatmap — mean Q(s,a) by stage × action.*
+
+**Reading note on magnitudes.** Heatmap cells are means of Q(s, a) aggregated over all `error_type × attempt_num × last_action` combinations for a given (stage, action) pair. Because `attempt_num` and `last_action` have many values the agent rarely reaches in any single trajectory, the averages are small in absolute terms; comparisons within a row (stage) are the meaningful signal.
 
 *Q-Learning agent:*
 - `lint × skip_stage` = 0.02 (highest): agent learned that skipping lint is often safe and fast
@@ -341,19 +371,43 @@ The heatmaps aggregate learned Q-values by pipeline stage × action (mean over a
 *UCB agent:*
 - `lint × auto_fix` = 0.01 (highest): UCB converged on `auto_fix` for lint (higher recovery probability than `skip_stage`)
 - `security_scan × escalate` = −0.01 (most negative): same learned aversion to escalation
-- Both agents show near-zero Q-values on `escalate` for most stages, confirming successful penalty internalization
+- Both agents show near-zero Q-values on `escalate` for most stages, confirming successful penalty internalization.
+
+#### Figure 6 — Recovery Outcome Comparison
+
+![Recovery rate comparison](results/recovery_rate_comparison.png)
+
+*Figure 6. Recovery outcome comparison across conditions (auto-resolved vs escalated).*
+
+All four conditions reach 100% recovery, but the composition differs sharply: Baseline escalates 45.5% of episodes, Rule-Based 10.0%, Q-Learning 4.5%, UCB only 1.0%. This visual makes the "ceilinged recovery rate, meaningful escalation rate" point directly.
+
+#### Figure 7 — Recovery Attempts Distribution
+
+![Recovery attempts boxplot](results/recovery_attempts_boxplot.png)
+
+*Figure 7. Distribution of recovery attempts per episode across the four conditions.*
+
+Rule-Based has the lowest median (1 attempt) with a tight distribution. Q-Learning and UCB sit near 1–2 attempts with small tails. Baseline's mean (2.775) is inflated by a heavy upper tail — retries until the 3-attempt cap, then escalate.
+
+#### Figure 8 — Sample Agent Interactions
+
+![Sample interactions](results/sample_interactions.png)
+
+*Figure 8. Sample agent interactions — early exploration vs. converged behaviour.*
+
+Early episodes show the Q-Learning agent taking random, often costly actions (ε ≈ 0.97). Late episodes show the converged policy picking the reward-maximizing action on the first step (e.g., `skip_stage` for lint, `auto_fix` for security_scan, `revert` for deploy rollback). See `results/sample_interactions.txt` for the full text transcript.
 
 ### 8.3 Key Insights
 
-1. **UCB dominates on escalation rate (1.0% vs 4.5%):** The optimism bonus ensures underexplored state-action pairs are tried before escalating, naturally suppressing unnecessary human hand-offs.
+1. **UCB shows substantially lower escalation (1.0% vs 4.5% for Q-Learning):** The UCB optimism bonus encourages trying underexplored actions before escalating. Confidence intervals do not overlap on this seed, but the absolute 3.5-point difference is small — multi-seed runs would be needed to firm up this claim.
 
-2. **Q-Learning achieves marginally higher mean reward (7.394 vs 7.353):** The difference is within noise (both std ≈ 4.5), suggesting both policies converge to near-equivalent quality.
+2. **Both RL agents achieve similar mean reward:** Q-Learning (7.394) and UCB (7.353) differ by less than 0.05, well within one standard deviation. Neither dominates on reward; the differentiator is escalation rate and reward stability.
 
-3. **Rule-Based is competitive:** The hand-crafted policy (10% escalation, reward +7.322) is only slightly outperformed by learned agents, indicating that the recovery probability table is well-calibrated to domain knowledge. The RL agents' value-add is primarily in reducing escalations.
+3. **Rule-Based is competitive:** The hand-crafted policy (10% escalation, reward +7.322) is only slightly behind learned agents. RL's primary advantage here is escalation suppression, not raw reward. This indicates that when domain experts can encode a high-quality rule set, a tabular RL agent offers modest incremental gains on this simulator.
 
-4. **Baseline collapses on hard failures:** 45.5% escalation rate with negative mean reward confirms that naive retry-then-escalate is unsuitable for production pipelines.
+4. **Baseline's high escalation rate drives negative mean reward:** At 45.5% escalation, the escalation penalty (−8 × criticality) dominates, producing a mean reward of −1.894. Naive retry-then-escalate is unsuitable for production.
 
-5. **Reward standard deviation:** UCB's lower std (4.292) indicates more consistent episode outcomes—a desirable property for production reliability.
+5. **UCB reward std is slightly lower (4.292 vs 4.623):** More consistent episode outcomes under UCB — a desirable property for production reliability, though the difference is modest.
 
 ---
 
@@ -466,15 +520,21 @@ All random number generators are seeded via `RANDOM_SEED = 42` in `config.py`. T
 
 ## 11. Ethical Considerations
 
-1. **Human-in-the-loop for high-risk actions:** The `skip_stage` action on `security_scan` carries a −5 reward penalty and is flagged as `safe_for_autonomous_recovery=False` by the `PipelineStateInspector`. This discourages autonomous bypassing of security checks.
+1. **Human-in-the-loop for high-risk actions:** The `skip_stage` action on `security_scan` carries a −5 reward penalty and is flagged `safe_for_autonomous_recovery=False` by the `PipelineStateInspector`. This discourages autonomous bypassing of security checks.
 
 2. **Escalation as a safe fallback:** The `escalate` action is always available; the reward function penalizes it without removing it. Agents learn to minimize unnecessary escalation while preserving the ability to escalate when needed.
 
-3. **Synthetic training data:** The Q-tables are trained entirely on synthetic simulator data with hand-crafted `RECOVERY_PROBS`. **These agents must be retrained on real pipeline failure data before any production deployment.**
+3. **This is a simulation, not a production system:** All experiments run on a synthetic stochastic simulator with hand-crafted recovery probabilities. No real CI/CD logs, no real failure distributions, no human escalation partners. Any production deployment would require retraining on real pipeline telemetry, staged shadow-mode evaluation, and ongoing monitoring.
 
-4. **Transparency:** The AutoGen GroupChat narration mode provides human-readable explanations of every recovery decision, enabling audit trails for CI/CD governance.
+4. **Automation bias and over-trust:** A high-performing auto-healing agent risks being trusted beyond its training distribution. Engineers may stop reviewing CI outcomes once the agent "usually works," which makes rare catastrophic actions (e.g., an inappropriate `revert` that erases a hotfix) harder to catch. Mitigations: maintain human review on high-criticality stages (`security_scan`, `deploy`), surface the agent's confidence / uncertainty, and alert on out-of-distribution state encodings.
 
-5. **Reward function bias:** Stage criticality weights encode an assumption that `security_scan` failures are 3× more critical than `lint` failures. This is configurable in `config.py` and should be validated against organizational risk models before deployment.
+5. **Training-distribution shift:** Recovery probabilities drawn from a static table will diverge from real pipeline behaviour as dependencies, test suites, and infrastructure change. A deployed agent needs continuous retraining or detection of distribution drift to avoid silently degrading.
+
+6. **Accountability for autonomous actions:** When `skip_stage`, `revert`, or `switch_version` fires without human review, responsibility for downstream incidents is ambiguous. Organisations adopting an auto-healer need a clear ownership and audit story before enabling integrated mode on shared infrastructure.
+
+7. **Transparency:** The AutoGen GroupChat narration mode provides human-readable explanations of every recovery decision, enabling audit trails for CI/CD governance.
+
+8. **Reward function bias:** Stage criticality weights are configurable in `config.py` and should be validated against organizational risk models before deployment. The default weights encode an assumption that `security_scan` is ~3× more critical than `lint` — reasonable for most teams, but a specific business decision that should be reviewed.
 
 ---
 
@@ -482,10 +542,13 @@ All random number generators are seeded via `RANDOM_SEED = 42` in `config.py`. T
 
 ### Conclusions
 
-- Tabular Q-Learning with UCB1 exploration achieves a **1.0% escalation rate** versus 45.5% for naive retry baseline—a 45× reduction in unnecessary human interventions.
-- UCB converges faster and more stably than ε-greedy, making it the preferred exploration strategy for this problem.
-- Rule-based policies remain competitive in mean reward but cannot adapt to unseen failure combinations without manual rule updates.
-- LLM integration (Llama 3.1 8B) adds interpretable tie-breaking on ambiguous Q-values without degrading RL performance, provided the LLM call budget is bounded.
+> This project is a **simulation study**. All results are from a synthetic stochastic pipeline with hand-crafted failure probabilities and a single random seed. The findings below apply to this simulator; they are suggestive but not sufficient for production claims.
+
+- **UCB1 exploration produced a substantially lower escalation rate (1.0%)** than ε-greedy Q-Learning (4.5%) and the naive baseline (45.5%) on this simulated pipeline. The confidence intervals for UCB and Q-Learning do not overlap on this seed, but multi-seed validation is needed.
+- **Both RL agents achieved similar mean reward (~7.35–7.39)**, with the main difference being reward stability — UCB's lower standard deviation (4.292 vs 4.623) indicates more consistent episode outcomes.
+- **Rule-based policies remain competitive in mean reward**, suggesting that the RL advantage in this setting comes primarily from reducing escalations rather than increasing raw reward. When domain experts can encode a high-quality rule set, a tabular RL agent adds modest incremental value on this simulator.
+- **LLM integration (Llama 3.1 8B) provides interpretable tie-breaking** on ambiguous Q-values without measurably degrading RL performance, provided the per-episode call budget is bounded (≤ 6 calls here).
+- **Recovery rate is a saturated metric in this simulator (100% for all conditions)** and should not be used as evidence of superiority. Escalation rate, mean attempts, and mean reward are the meaningful comparison axes.
 
 ### Future Work
 
